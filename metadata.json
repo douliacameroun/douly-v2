@@ -1,0 +1,8 @@
+{
+  "name": "commercialdoulia",
+  "description": "A world-class B2B AI sales agent for the Cameroonian market, offering consultative audits and AI-driven growth solutions (Connect, Process, Insight).",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

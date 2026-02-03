@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistant Technique DOULIA | Agent Commercial</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'doulia-lime': '#bef264',
+              'doulia-cyan': '#22d3ee',
+              'doulia-navy': '#020617',
+              'doulia-teal': '#0f766e',
+            },
+            fontFamily: {
+              'inter': ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'fade-in-up': 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+              'rotate-slow': 'rotate 10s linear infinite',
+              'scintillate': 'scintillate 3s ease-in-out infinite',
+              'aura-breathing': 'auraBreathing 5s ease-in-out infinite',
+              'border-flow': 'borderFlow 4s linear infinite',
+              'circuit-scan': 'circuitScan 4s linear infinite',
+              'glitch-subtle': 'glitchSubtle 5s ease-in-out infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'gradient-x': 'gradientX 3s ease infinite',
+              'shimmer': 'shimmer 2s linear infinite',
+            },
+            keyframes: {
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' },
+                '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+              },
+              rotate: {
+                '0%': { transform: 'rotate(0deg)' },
+                '100%': { transform: 'rotate(360deg)' },
+              },
+              scintillate: {
+                '0%, 100%': { filter: 'brightness(1) drop-shadow(0 0 5px rgba(34, 211, 238, 0.4))' },
+                '50%': { filter: 'brightness(1.3) drop-shadow(0 0 20px rgba(34, 211, 238, 0.8))' },
+              },
+              auraBreathing: {
+                '0%, 100%': { boxShadow: '0 0 15px rgba(191, 242, 100, 0.05)', transform: 'scale(1)' },
+                '50%': { boxShadow: '0 0 35px rgba(34, 211, 238, 0.15)', transform: 'scale(1.01)' },
+              },
+              glowPulse: {
+                '0%, 100%': { filter: 'brightness(1)', transform: 'scale(1)' },
+                '50%': { filter: 'brightness(1.2)', transform: 'scale(1.02)' },
+              },
+              borderFlow: {
+                '0%': { transform: 'rotate(0deg)' },
+                '100%': { transform: 'rotate(360deg)' },
+              },
+              circuitScan: {
+                '0%': { transform: 'translateX(-100%)', opacity: '0' },
+                '20%': { opacity: '0.4' },
+                '80%': { opacity: '0.4' },
+                '100%': { transform: 'translateX(100%)', opacity: '0' },
+              },
+              glitchSubtle: {
+                '0%, 100%': { transform: 'translate(0)' },
+                '92%': { transform: 'translate(1px, -1px)' },
+                '94%': { transform: 'translate(-1px, 1px)' },
+                '96%': { transform: 'translate(0)' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              gradientX: {
+                '0%, 100%': { 'background-position': '0% 50%' },
+                '50%': { 'background-position': '100% 50%' },
+              },
+              shimmer: {
+                '0%': { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition: '200% 0' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+        :root {
+            --mouse-x: 50%;
+            --mouse-y: 50%;
+            --neural-glow: rgba(34, 211, 238, 0.15);
+            --click-pulse: 0;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-color: #030712;
+            color: #f8fafc;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .neural-light {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle 600px at var(--mouse-x) var(--mouse-y), var(--neural-glow) 0%, transparent 100%);
+            z-index: 5;
+            pointer-events: none;
+            mix-blend-mode: soft-light;
+            transition: background 0.2s ease-out;
+        }
+
+        .click-ripple {
+            position: fixed;
+            top: var(--mouse-y);
+            left: var(--mouse-x);
+            width: 2px;
+            height: 2px;
+            background: rgba(191, 242, 100, 0.4);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%) scale(var(--click-pulse));
+            opacity: calc(1 - var(--click-pulse) / 200);
+            z-index: 6;
+        }
+
+        .ambient-glow {
+            position: fixed;
+            width: 50vw;
+            height: 50vh;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: -2;
+            opacity: 0.1;
+            pointer-events: none;
+        }
+        .glow-1 { top: -10%; left: -10%; background: #bef264; }
+        .glow-2 { bottom: -10%; right: -10%; background: #22d3ee; }
+
+        .aura-ai {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 15px rgba(191, 242, 100, 0.05);
+            animation: auraBreathing 8s ease-in-out infinite;
+        }
+
+        .neon-text-glow {
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+        }
+
+        .ai-flow-container {
+            position: relative;
+            padding: 1px;
+            overflow: hidden;
+            border-radius: 1.5rem;
+        }
+        .ai-flow-container::before {
+            content: '';
+            position: absolute;
+            width: 300%;
+            height: 300%;
+            top: -100%;
+            left: -100%;
+            background: conic-gradient(from 0deg, transparent, #22d3ee, transparent, #bef264, transparent);
+            z-index: -1;
+            animation: rotate-slow 6s linear infinite;
+            opacity: 0.1;
+        }
+        .ai-flow-container:hover::before {
+            opacity: 0.5;
+            animation-duration: 3s;
+        }
+        
+        .ai-flow-content {
+            background: rgba(2, 6, 23, 0.95);
+            border-radius: 1.45rem;
+            height: 100%;
+            width: 100%;
+            z-index: 1;
+            transition: all 0.4s ease;
+        }
+        .ai-flow-content:hover {
+            animation: auraBreathing 3s ease-in-out infinite;
+        }
+
+        .circuit-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #22d3ee, #bef264, transparent);
+            width: 100%;
+            z-index: 0;
+            pointer-events: none;
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3);
+        }
+
+        .circuit-overlay {
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 10 H 90 V 90 H 10 Z' fill='none' stroke='rgba(191, 242, 100, 0.03)' stroke-width='0.5'/%3E%3Ccircle cx='10' cy='10' r='1' fill='rgba(34, 211, 238, 0.07)'/%3E%3Ccircle cx='90' cy='90' r='1' fill='rgba(34, 211, 238, 0.07)'/%3E%3C/svg%3E");
+            background-size: 80px 80px;
+            z-index: -1;
+            opacity: 0.6;
+            pointer-events: none;
+            animation: circuitShift 60s linear infinite;
+        }
+
+        @keyframes circuitShift {
+            0% { background-position: 0 0; }
+            100% { background-position: 800px 800px; }
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { 
+            background: linear-gradient(to bottom, #bef264, #22d3ee);
+            border-radius: 10px;
+        }
+
+        .cyber-grid {
+            background-image: linear-gradient(rgba(191, 242, 100, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(191, 242, 100, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        .neural-bubble {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .neural-bubble::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at var(--msg-mouse-x, 50%) var(--msg-mouse-y, 50%), rgba(255,255,255,0.08) 0%, transparent 60%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        .neural-bubble:hover::after {
+            opacity: 1;
+        }
+        .neural-bubble:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(34, 211, 238, 0.1);
+        }
+
+        .interactive-glow:hover {
+            box-shadow: 0 0 30px rgba(34, 211, 238, 0.15), inset 0 0 20px rgba(191, 242, 100, 0.05);
+        }
+
+        .selected-gradient {
+            background: linear-gradient(270deg, #22d3ee, #bef264);
+            background-size: 200% 200%;
+            animation: gradientX 3s ease infinite;
+            color: #020617;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .selected-gradient:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.6);
+        }
+
+        .send-button-neural {
+            background: linear-gradient(135deg, #bef264, #22d3ee);
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            box-shadow: 0 0 10px rgba(191, 242, 100, 0.2), 0 5px 15px rgba(0,0,0,0.4);
+        }
+        .send-button-neural::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(45deg, #bef264, #22d3ee, #bef264);
+            z-index: -1;
+            background-size: 400%;
+            animation: shimmer 4s linear infinite;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            filter: blur(8px);
+        }
+        .send-button-neural:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 25px rgba(191, 242, 100, 0.5), 0 0 40px rgba(34, 211, 238, 0.3);
+        }
+        .send-button-neural:hover::before {
+            opacity: 1;
+        }
+        .send-button-neural:active {
+            transform: scale(0.9);
+        }
+
+        .btn-diagnostic-global {
+          background: linear-gradient(90deg, #bef264 0%, #22d3ee 100%);
+          box-shadow: 0 0 20px rgba(191, 242, 100, 0.4);
+          animation: pulse-aura 2s infinite !important;
+          color: #020617 !important;
+          font-weight: 900 !important;
+        }
+
+        @keyframes pulse-aura {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(191, 242, 100, 0.7); }
+          70% { transform: scale(1.03); box-shadow: 0 0 0 15px rgba(191, 242, 100, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(191, 242, 100, 0); }
+        }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+        "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
+        "react/": "https://esm.sh/react@^19.2.4/",
+        "react": "https://esm.sh/react@^19.2.4",
+        "qrcode": "https://esm.sh/qrcode@^1.5.4",
+        "vite": "https://esm.sh/vite@^7.3.1",
+        "chart.js/": "https://esm.sh/chart.js@^4.5.1/",
+        "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+      }
+    }
+    </script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="cyber-grid">
+    <div class="circuit-overlay"></div>
+    <div class="neural-light"></div>
+    <div class="click-ripple" id="ripple"></div>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+    <script>
+        window.addEventListener('mousedown', () => {
+            const ripple = document.getElementById('ripple');
+            if (ripple) {
+                ripple.style.transition = 'none';
+                document.documentElement.style.setProperty('--click-pulse', '0');
+                setTimeout(() => {
+                    ripple.style.transition = 'all 0.6s cubic-bezier(0, 0, 0.2, 1)';
+                    document.documentElement.style.setProperty('--click-pulse', '200');
+                }, 10);
+            }
+        });
+    </script>
+</body>
+</html>
