@@ -1,24 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DOULIA_PACKS, DOULIA_LOGO_URL } from './constants';
 import { ChatMessage, DouliaVoice } from './types';
-import { chatWithDoulia, generateAuditReport, textToSpeech } from './services/geminiService';
+import { chatWithDoulia, generateAuditReport, textToSpeech, getChatFromLocal } from './services/geminiService';
 import { playClickSound, startAmbientDrone, playHoverSound, playNotificationSound } from './services/audioEffects';
 import AuditReport from './components/AuditReport';
 import ParticleBackground from './components/ParticleBackground';
+import emailjs from '@emailjs/browser';
 
 const SIGNATURE_VOICE: DouliaVoice = 'Kore';
 
-// CONFIGURATION EMAILJS IDENTIFIANTS FOURNIS
 const EMAILJS_PUBLIC_KEY = "xIOqJEltycOgMFQrN";
 const EMAILJS_TEMPLATE_ID = "template_jn5hfms";
-const EMAILJS_SERVICE_ID = (import.meta as any).env?.VITE_EMAILJS_SERVICE_ID || "service_doulia_default"; 
+const EMAILJS_SERVICE_ID = "service_doulia_default"; 
 
 interface UserData {
   fullName?: string;
   company?: string;
   sector?: string;
   pains?: string;
-  contact?: string; // Téléphone
+  contact?: string;
   email?: string;
 }
 
@@ -48,41 +48,44 @@ const App: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<any>(null);
   const droneStarted = useRef(false);
 
-  // Initialisation EmailJS au démarrage
   useEffect(() => {
-    if ((window as any).emailjs) {
-      (window as any).emailjs.init(EMAILJS_PUBLIC_KEY);
-    }
+    emailjs.init(EMAILJS_PUBLIC_KEY);
   }, []);
 
-  // GESTION DE LA MÉMOIRE (LocalStorage)
+  // Hydratation de la mémoire locale
   useEffect(() => {
     const savedName = localStorage.getItem('doulia_userName');
     const savedCompany = localStorage.getItem('doulia_companyName');
+    const savedEmail = localStorage.getItem('doulia_userEmail');
+    const savedHistory = getChatFromLocal(); 
     
-    if (savedName && savedCompany) {
-      setUserData(prev => ({ ...prev, fullName: savedName, company: savedCompany }));
-      setMessages([{
-        role: 'model',
-        text: `<b>Ravi de vous revoir ${savedName} de chez ${savedCompany} !</b><br/><br/>Comment se porte le développement de votre projet depuis notre dernier échange ? Je suis prête à poursuivre notre audit stratégique.`,
+    if (savedName) setUserData(prev => ({ ...prev, fullName: savedName }));
+    if (savedCompany) setUserData(prev => ({ ...prev, company: savedCompany }));
+    if (savedEmail) setUserData(prev => ({ ...prev, email: savedEmail }));
+
+    if (savedHistory.length > 0) {
+      const displayHistory: ChatMessage[] = savedHistory.map(m => ({
+        role: m.role,
+        text: m.parts[0].text,
         timestamp: new Date()
-      }]);
+      }));
+      setMessages(displayHistory);
     } else {
       setMessages([{
         role: 'model',
-        text: "Bonjour ! Je suis <b>Douly</b>, votre consultante stratégique chez <b>DOULIA</b>.<br/><br/>Mon but est d'analyser vos processus pour identifier où l'IA peut vous faire gagner du temps et de l'argent. Comment puis-je vous appeler et quelle est votre entreprise ?",
+        text: "Bonjour ! Je suis <b>Douly</b>, votre consultante stratégique chez <b>DOULIA</b>.<br/><br/>Pour commencer notre analyse, comment puis-je vous appeler et quelle est votre entreprise ?",
         timestamp: new Date()
       }]);
     }
   }, []);
 
-  // Sauvegarde automatique des données
+  // Mise à jour de la mémoire et du score de complétion
   useEffect(() => {
     if (userData.fullName) localStorage.setItem('doulia_userName', userData.fullName);
     if (userData.company) localStorage.setItem('doulia_companyName', userData.company);
+    if (userData.email) localStorage.setItem('doulia_userEmail', userData.email);
     
     let count = 0;
     if (userData.fullName) count++;
@@ -93,66 +96,63 @@ const App: React.FC = () => {
     setProgress(Math.min(count * 20, 100));
   }, [userData, emailSent]);
 
-  // LOGIQUE D'ENVOI EMAILJS AUTOMATIQUE
-  const triggerEmailJS = async (clientEmail: string) => {
-    if (!clientEmail || emailSent) return;
-
+  // FONCTION D'ENVOI EMAIL (Option B : Déclenchée par le bouton Audit)
+  const handleGenerateAudit = async () => {
+    playClickSound();
+    
+    // 1. Préparer le contenu pour l'email
     const chatHistory = messages.map(m => `${m.role.toUpperCase()}: ${m.text.replace(/<[^>]*>?/gm, '')}`).join('\n\n');
     
     const templateParams = {
-      to_email: clientEmail, // Destinataire client
-      admin_email: "douliacameroun@gmail.com", // Copie admin
+      to_email: userData.email || "client@doulia.com", // Email du client si capturé
+      admin_email: "doualiacameroun@gmail.com",
       user_name: userData.fullName || "Cher Partenaire",
       company_name: userData.company || "Votre Entreprise",
-      user_phone: userData.contact || "Non renseigné",
       audit_content: chatHistory,
-      message_confirm: `Cher Partenaire, Nous vous remercions pour la qualité de votre échange avec notre assistante Douly. Vos besoins ont bien été transmis à nos experts.
-      
-Prochaines étapes :
-1. Analyse de vos données : Un consultant senior examine actuellement les points soulevés.
-2. Rapport détaillé : Vous recevrez sous peu un audit complet incluant des solutions sur mesure.
-3. Suivi : Un membre de l'équipe DOULIA vous recontactera dans les prochaines minutes.
-
-L'intelligence artificielle au service de votre vision.
-Bien cordialement,
-L'Équipe Technique DOULIA`
     };
 
     try {
-      await (window as any).emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-      setEmailSent(true);
-      
-      // Message de confirmation immédiat dans le chat
+      // 2. Envoyer via EmailJS
+      if (!emailSent) {
+        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+        setEmailSent(true);
+      }
+
+      // 3. Message de confirmation (consigne respectée)
       setMessages(prev => [...prev, {
         role: 'model',
-        text: "<b>Vos données ont bien été transmises à contact@douliacameroun.com.</b><br/><br/>Un accusé de réception professionnel vient de vous être envoyé. Nos experts analysent votre dossier et vous rappelleront dans les prochaines minutes.",
+        text: "<b>Vos données ont bien été transmises à contact@douliacameroun.com.</b><br/><br/>Un expert DOULIA va vous rappeler dans les prochaines minutes pour approfondir votre projet.",
         timestamp: new Date()
       }]);
+
+      // 4. Basculer sur la page Audit
+      setActivePage('audit');
+      
     } catch (error) {
       console.error("EmailJS Error:", error);
+      // En cas d'erreur, on affiche quand même l'audit mais on prévient
+      setActivePage('audit');
     }
   };
 
-  const handleSendMessage = async (customText?: string, packImages?: string[]) => {
+  const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || input;
     if (!textToSend.trim() && !imageFile) return;
 
     if (!droneStarted.current) { startAmbientDrone(); droneStarted.current = true; }
     playClickSound();
     
-    // Détection d'email
+    // Capture d'email fluide
     const emailRegex = /\S+@\S+\.\S+/;
     const detectedEmail = textToSend.match(emailRegex);
-    let emailCaptured = "";
-
-    if (detectedEmail && !emailSent) {
-      emailCaptured = detectedEmail[0];
-      setUserData(prev => ({ ...prev, email: emailCaptured }));
+    if (detectedEmail) {
+      setUserData(prev => ({ ...prev, email: detectedEmail[0] }));
     }
 
-    setMessages(prev => [...prev, {
+    const userMessage: ChatMessage = {
       role: 'user', text: textToSend, timestamp: new Date(), attachments: previewImage ? [previewImage] : []
-    }]);
+    };
+    setMessages(prev => [...prev, userMessage]);
     
     setInput('');
     setIsLoading(true);
@@ -168,27 +168,29 @@ L'Équipe Technique DOULIA`
     }
     setPreviewImage(null); setImageFile(null);
 
-    const history = messages.slice(-10).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
-    const contextPrompt = `CONTEXTE_MEMOIRE: ${JSON.stringify(userData)}.`;
+    const historyForAI = messages.map(m => ({
+      role: m.role,
+      parts: [{ text: m.text }]
+    }));
+
+    const contextPrompt = `Client: ${userData.fullName || 'Inconnu'} de ${userData.company || 'Entreprise inconnue'}.`;
 
     try {
-      const response = await chatWithDoulia(`${contextPrompt}\nInput: ${textToSend}`, history, imageParts);
+      const { formattedText, updatedHistory } = await chatWithDoulia(`${contextPrompt}\nMessage: ${textToSend}`, historyForAI, imageParts);
       
-      // Mise à jour simplifiée de la mémoire locale
-      if (!userData.fullName && progress === 0) setUserData(prev => ({ ...prev, fullName: textToSend }));
-      if (progress === 20 && !userData.company) setUserData(prev => ({ ...prev, company: textToSend }));
+      if (!userData.fullName && textToSend.length < 40) setUserData(prev => ({ ...prev, fullName: textToSend }));
 
-      setMessages(prev => [...prev, { role: 'model', text: response, timestamp: new Date(), attachments: packImages }]);
+      setMessages(updatedHistory.map(m => ({
+        role: m.role,
+        text: m.parts[0].text,
+        timestamp: new Date()
+      })));
+      
       setIsLoading(false);
       playNotificationSound();
 
-      // Si email détecté, on lance EmailJS
-      if (emailCaptured) {
-        triggerEmailJS(emailCaptured);
-      }
-
       if (isOnline) {
-        const audio = await textToSpeech(response, SIGNATURE_VOICE);
+        const audio = await textToSpeech(formattedText, SIGNATURE_VOICE);
         if (audio) {
           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
           const binaryString = atob(audio);
@@ -205,53 +207,12 @@ L'Équipe Technique DOULIA`
         }
       }
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'model', text: "Liaison neural instable.", timestamp: new Date() }]);
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: "Liaison perturbée. Veuillez contacter nos experts au 6 56 30 48 18 ou par email à contact@douliacameroun.com.", 
+        timestamp: new Date() 
+      }]);
       setIsLoading(false);
-    }
-  };
-
-  const performAudit = async () => {
-    if (!emailSent && !userData.email) return;
-    setIsLoading(true);
-    playClickSound();
-
-    const historySummary = messages.map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n\n');
-    const context = `Entreprise: ${userData.company}. Historique: ${historySummary}`;
-    
-    try {
-      const report = await generateAuditReport(context);
-      setAuditData(report);
-      setActivePage('audit');
-    } catch (e) {
-      console.error("Audit Generation Error", e);
-    }
-    setIsLoading(false);
-  };
-
-  const getMessageIcon = (msg: ChatMessage) => {
-    if (msg.role === 'user') return <i className="fas fa-circle-user text-slate-400"></i>;
-    const text = msg.text.toLowerCase();
-    if (text.includes('table') || text.includes('| --- |')) return <i className="fas fa-file-invoice text-doulia-lime"></i>;
-    if (text.includes('sécurité') || text.includes('transmises')) return <i className="fas fa-shield-halved text-doulia-cyan"></i>;
-    return <i className="fas fa-robot text-doulia-lime"></i>;
-  };
-
-  const toggleListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    if (isListening) { recognitionRef.current?.stop(); setIsListening(false); }
-    else {
-      if (!recognitionRef.current) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.lang = 'fr-FR';
-        recognitionRef.current.onresult = (event: any) => {
-          let t = '';
-          for (let i = event.resultIndex; i < event.results.length; i++) t += event.results[i][0].transcript;
-          setInput(prev => prev + t);
-        };
-      }
-      recognitionRef.current.start(); setIsListening(true); playClickSound();
     }
   };
 
@@ -263,181 +224,126 @@ L'Équipe Technique DOULIA`
     <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#030712] text-slate-100 flex p-2 md:p-3 gap-3 font-inter">
       <ParticleBackground />
 
-      <aside className={`
-        ${sidebarOpen ? 'flex' : 'hidden'} md:flex flex-col w-[340px] shrink-0 h-full rounded-[2.5rem] 
-        bg-slate-950/40 border border-white/5 aura-ai overflow-hidden backdrop-blur-3xl
-        transition-all duration-300 absolute md:relative z-[100] md:z-auto left-2 md:left-0 top-2 md:top-0 h-[calc(100%-1rem)] md:h-full
-      `}>
-        <div className="p-4 flex flex-col h-full bg-gradient-to-b from-slate-950/80 to-slate-900/20 relative">
-          <div className="circuit-line top-1/4 opacity-20 animate-circuit-scan"></div>
-          
-          <div className="flex flex-col mb-4 relative z-10">
-            <div className="absolute top-0 right-0 flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-full animate-pulse">
-              <span className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_12px_#22c55e]"></span>
-              <span className="text-[8px] font-black text-green-500 uppercase tracking-widest tracking-widest">Neural Link Active</span>
-            </div>
-
-            <div className="flex flex-row items-center gap-6 cursor-pointer group" onClick={() => window.location.reload()}>
-              <div className="relative shrink-0">
-                <div className="absolute inset-0 bg-doulia-lime/30 blur-3xl rounded-full group-hover:bg-doulia-lime/50 transition-all"></div>
-                <img 
-                  src={DOULIA_LOGO_URL} 
-                  className="w-[115px] h-[115px] object-contain animate-scintillate relative z-10 drop-shadow-[0_0_20px_rgba(190,242,100,0.4)] group-hover:scale-105 transition-transform" 
-                  alt="DOULIA Logo" 
-                />
-              </div>
-              <div className="flex flex-col">
-                <h1 className="text-3xl font-black text-doulia-lime italic uppercase tracking-tighter neon-text-glow leading-none">Douly</h1>
-                <p className="text-[10px] font-black text-doulia-cyan uppercase tracking-[0.25em] mt-2 opacity-80 animate-pulse tracking-widest">Agent Commercial DOULIA</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mb-5 z-10">
-            <button onClick={() => setActivePage('chat')} className={`py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activePage === 'chat' ? 'selected-gradient shadow-lg' : 'bg-white/5 text-slate-400 interactive-glow'}`}>Interface</button>
-            <button onClick={() => { if(auditData) setActivePage('audit'); }} disabled={!auditData} className={`py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activePage === 'audit' ? 'selected-gradient shadow-lg' : 'bg-white/5 text-slate-400 interactive-glow disabled:opacity-20'}`}>Diagnostic</button>
-          </div>
-          
-          <nav className="flex-1 space-y-4 overflow-y-auto custom-scrollbar pr-1 z-10 font-inter">
-             <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4 ml-2">Protocoles Actifs</p>
-             {DOULIA_PACKS.map(p => (
-               <div key={p.id} className="ai-flow-container group" onMouseEnter={playHoverSound}>
-                 <div onClick={() => handleSendMessage(`Détails sur ${p.name}`, p.images)} 
-                      className="ai-flow-content p-2.5 cursor-pointer hover:bg-slate-900/60 transition-all border border-white/5 group-hover:shadow-[inset_0_0_30px_rgba(34,211,238,0.15)]">
-                   <div className="flex items-center gap-4 mb-2">
-                     <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-doulia-lime/10 text-doulia-lime text-xl group-hover:bg-doulia-lime group-hover:text-slate-950 transition-all">
-                       {p.icon}
-                     </div>
-                     <span className="text-[15px] font-black uppercase text-doulia-lime tracking-tighter leading-none">{p.name}</span>
-                   </div>
-                   <ul className="space-y-1 ml-1 pb-1 font-inter">
-                      {p.services.map((s, idx) => (
-                        <li key={idx} className="text-[13px] font-medium text-slate-200 flex items-center gap-3 opacity-80 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
-                          <i className={`${s.icon} text-doulia-cyan text-[10px] w-4 text-center`}></i>
-                          <span className="truncate">{s.text}</span>
-                        </li>
-                      ))}
-                   </ul>
-                 </div>
-               </div>
-             ))}
-          </nav>
-
-          <div className="mt-4 pt-4 border-t border-white/10 space-y-2 z-10 px-2">
-            <button onClick={() => { if(window.confirm("Réinitialiser mémoire ?")) { localStorage.clear(); window.location.reload(); } }} className="w-full py-2 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-red-500 transition-colors">Nettoyer Mémoire</button>
-            {(progress >= 80 || emailSent) && (
-              <button onClick={performAudit} className="w-full py-5 btn-diagnostic-global rounded-2xl text-[11px] tracking-[0.2em] transition-all uppercase border-2 border-cyan-400/50">LANCER DIAGNOSTIC</button>
-            )}
-          </div>
+      {activePage === 'audit' ? (
+        <div className="flex-1 h-full overflow-y-auto z-[200] bg-slate-950 rounded-[2rem] p-4">
+            <button onClick={() => setActivePage('chat')} className="mb-4 text-doulia-lime font-bold uppercase text-[10px] tracking-widest flex items-center gap-2">
+                <i className="fas fa-arrow-left"></i> Retour au chat
+            </button>
+            <AuditReport data={auditData} />
         </div>
-      </aside>
+      ) : (
+        <>
+          <aside className={`
+            ${sidebarOpen ? 'translate-x-0' : '-translate-x-[110%]'} md:translate-x-0
+            flex flex-col w-[320px] shrink-0 h-full rounded-[2rem] 
+            bg-slate-950/80 border border-white/10 aura-ai overflow-hidden backdrop-blur-3xl
+            transition-all duration-300 absolute md:relative z-[100] md:z-auto left-2 top-2 bottom-2 md:top-0 md:left-0 md:h-full
+          `}>
+            <div className="p-4 flex flex-col h-full relative">
+              <button onClick={() => setSidebarOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white">
+                <i className="fas fa-times text-xl"></i>
+              </button>
 
-      <main className="flex-1 h-full flex flex-col min-w-0 rounded-[2.5rem] border border-white/5 bg-slate-900/10 overflow-hidden relative shadow-2xl">
-        <header className="h-[72px] shrink-0 border-b border-white/[0.04] bg-slate-950/80 backdrop-blur-xl flex items-center px-6 md:px-10 justify-between z-50">
-           <div className="flex items-center gap-4">
-             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-doulia-lime md:hidden p-2"><i className="fas fa-bars text-xl"></i></button>
-             <div className="flex flex-col">
-               <h2 className="text-[12px] font-black tracking-[0.6em] text-doulia-cyan uppercase neon-text-glow">DOULIA_INTERFACE_V4.2</h2>
-               <span className="text-[8px] font-bold text-slate-500 tracking-[0.2em] uppercase">Status: Cryptage AES-256 Actif</span>
-             </div>
-           </div>
-           <div className="hidden md:flex items-center gap-3 bg-white/5 px-5 py-2 rounded-full border border-white/5">
-             <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-             <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest">{isOnline ? 'Neural Live' : 'Offline'}</span>
-           </div>
-        </header>
-
-        <div className="flex-1 flex flex-col min-h-0 relative bg-gradient-to-b from-transparent to-slate-950/40">
-          
-          {activePage === 'chat' && (
-            <div className="absolute top-0 left-0 w-full h-1 z-[60] bg-white/5">
-              <div className="h-full bg-gradient-to-r from-doulia-lime to-doulia-cyan transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(34,211,238,0.5)]" style={{ width: `${progress}%` }}></div>
-            </div>
-          )}
-
-          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth">
-            {activePage === 'chat' ? (
-              <div className="max-w-4xl mx-auto w-full space-y-12 pt-10 pb-20">
-                {messages.map((msg, idx) => (
-                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-start gap-4 animate-fade-in-up`}>
-                    {msg.role === 'model' && (
-                      <div className="w-10 h-10 rounded-full bg-slate-950 border border-white/10 flex items-center justify-center text-lg shrink-0 aura-ai shadow-[0_0_15px_rgba(190,242,100,0.1)]">
-                         {getMessageIcon(msg)}
-                      </div>
-                    )}
-                    
-                    <div className={`
-                        max-w-[85%] md:max-w-[75%] p-5 md:p-6 rounded-[2.5rem] border shadow-2xl backdrop-blur-md transition-all interactive-glow neural-bubble
-                        ${msg.role === 'user' ? 'bg-doulia-cyan/10 border-doulia-cyan/30 text-white rounded-tr-none' : 'bg-slate-950/90 border-white/10 text-slate-100 rounded-tl-none'}
-                      `}>
-                      {msg.attachments?.map((att, i) => (
-                         <div key={i} className="mb-5 relative group overflow-hidden rounded-3xl">
-                           <img src={att} className="max-h-80 w-full object-contain shadow-2xl border border-white/10" alt="Visual" />
-                         </div>
-                      ))}
-                      <div className="text-[13px] md:text-[14.5px] leading-relaxed font-medium tracking-tight" dangerouslySetInnerHTML={{ __html: msg.text }} />
-                    </div>
-
-                    {msg.role === 'user' && (
-                      <div className="w-10 h-10 rounded-full bg-slate-950 border border-white/10 flex items-center justify-center text-lg shrink-0 shadow-lg">
-                        {getMessageIcon(msg)}
-                      </div>
-                    )}
+              <div className="flex flex-col mb-6 pt-4">
+                <div className="flex flex-row items-center gap-4">
+                  <img src={DOULIA_LOGO_URL} className="w-[80px] h-[80px] object-contain" alt="Logo" />
+                  <div>
+                    <h1 className="text-2xl font-black text-doulia-lime italic uppercase leading-none">Douly</h1>
+                    <p className="text-[9px] font-bold text-doulia-cyan uppercase tracking-widest mt-1">Expert Doulia</p>
                   </div>
-                ))}
-                {isLoading && (
-                  <div className="flex items-center gap-4 text-doulia-lime p-5 animate-pulse">
-                    <div className="flex gap-1.5"><div className="w-2.5 h-2.5 bg-doulia-lime rounded-full animate-bounce"></div><div className="w-2.5 h-2.5 bg-doulia-lime rounded-full animate-bounce"></div></div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.4em]">{THINKING_STATUSES[thinkingIndex]}</span>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-            ) : (
-               <AuditReport data={auditData} onClose={() => setActivePage('chat')} onExploreMore={() => setActivePage('chat')} />
-            )}
-          </div>
-
-          {activePage === 'chat' && (
-            <footer className="shrink-0 w-full p-3 md:p-4 bg-slate-950/95 border-t border-white/[0.05] backdrop-blur-3xl z-[60]">
-              <div className="max-w-4xl mx-auto flex flex-col gap-3">
-                <div className="flex items-end gap-3 bg-slate-900/60 p-2 md:p-3 rounded-[2.5rem] border border-white/10 focus-within:border-doulia-lime/40 shadow-2xl relative overflow-hidden group">
-                  <button onClick={() => fileInputRef.current?.click()} className="w-11 h-11 flex items-center justify-center rounded-full text-doulia-lime transition-all shrink-0 hover:bg-doulia-lime/10">
-                    <i className="fas fa-paperclip text-lg"></i>
-                  </button>
-                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if(file) {
-                      setImageFile(file);
-                      const r = new FileReader();
-                      r.onload = ev => setPreviewImage(ev.target?.result as string);
-                      r.readAsDataURL(file);
-                    }
-                  }} />
-                  
-                  <textarea 
-                    ref={textareaRef}
-                    value={input} 
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
-                    onChange={e => setInput(e.target.value)} 
-                    placeholder="Paragez vos blocages avec Douly..." 
-                    rows={1}
-                    className="flex-1 bg-transparent border-none focus:ring-0 text-white text-[14px] md:text-[15px] px-2 placeholder:text-slate-600 font-medium resize-none max-h-[120px] custom-scrollbar" 
-                  />
-                  
-                  <button onClick={toggleListening} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 ${isListening ? 'bg-red-500/20 text-red-500' : 'text-doulia-cyan'}`}>
-                    <i className={`fas ${isListening ? 'fa-microphone-slash' : 'fa-microphone'} text-lg`}></i>
-                  </button>
-
-                  <button onClick={() => handleSendMessage()} disabled={!input.trim() && !imageFile} className="w-11 h-11 md:w-12 md:h-12 send-button-neural text-slate-950 rounded-full flex items-center justify-center shadow-xl hover:scale-105 disabled:opacity-20 transition-all shrink-0 group">
-                    <i className="fas fa-bolt text-xl group-hover:animate-scintillate"></i>
-                  </button>
                 </div>
               </div>
+
+              <nav className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-1">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Solutions IA</p>
+                  {DOULIA_PACKS.map(p => (
+                    <div key={p.id} onClick={() => { handleSendMessage(`Détails sur ${p.name}`); if(window.innerWidth < 768) setSidebarOpen(false); }} 
+                        className="p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-doulia-lime/10 cursor-pointer transition-all group">
+                      <div className="flex items-center gap-3">
+                        <span className="text-doulia-lime text-lg">{p.icon}</span>
+                        <span className="text-sm font-bold uppercase tracking-tighter">{p.name}</span>
+                      </div>
+                    </div>
+                  ))}
+              </nav>
+
+              <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
+                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full py-2 text-[9px] font-black text-slate-500 hover:text-red-400 uppercase">Réinitialiser la mémoire</button>
+                
+                {/* BOUTON GENERER AUDIT MODIFIÉ SELON OPTION B */}
+                {progress >= 60 && (
+                  <button 
+                    onClick={handleGenerateAudit} 
+                    className="w-full py-4 bg-doulia-lime text-slate-950 rounded-xl font-black text-[11px] uppercase shadow-[0_0_20px_rgba(190,242,100,0.3)] animate-pulse"
+                  >
+                    Générer Audit & Envoyer Rapport
+                  </button>
+                )}
+              </div>
+            </div>
+          </aside>
+
+          <main className="flex-1 h-full flex flex-col min-w-0 rounded-[2rem] border border-white/5 bg-slate-900/20 overflow-hidden relative">
+            <header className="h-[64px] shrink-0 border-b border-white/5 bg-slate-950/50 backdrop-blur-md flex items-center px-4 md:px-8 justify-between z-50">
+               <button onClick={() => setSidebarOpen(true)} className="md:hidden text-doulia-lime"><i className="fas fa-bars text-xl"></i></button>
+               <h2 className="text-[10px] font-black tracking-[0.4em] text-doulia-cyan uppercase">Doulia Interface v4.2</h2>
+               <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                 <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                 <span className="text-[9px] font-bold text-slate-400 uppercase">{isOnline ? 'Online' : 'Offline'}</span>
+               </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                <div className="max-w-3xl mx-auto space-y-8 pt-4 pb-32 md:pb-24">
+                  {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-start gap-3`}>
+                      {msg.role === 'model' && <div className="w-8 h-8 rounded-full bg-slate-900 border border-doulia-lime/30 flex items-center justify-center shrink-0"><i className="fas fa-robot text-doulia-lime"></i></div>}
+                      <div className={`p-4 md:p-5 rounded-[1.5rem] text-[14px] leading-relaxed ${msg.role === 'user' ? 'bg-doulia-cyan/10 border border-doulia-cyan/20 rounded-tr-none' : 'bg-slate-950/80 border border-white/5 rounded-tl-none'}`}>
+                        <div dangerouslySetInnerHTML={{ __html: msg.text }} />
+                      </div>
+                    </div>
+                  ))}
+                  {isLoading && <div className="text-doulia-lime text-[10px] font-black animate-pulse uppercase tracking-widest">{THINKING_STATUSES[thinkingIndex]}</div>}
+                  <div ref={chatEndRef} />
+                </div>
+            </div>
+
+            <footer className="fixed md:absolute bottom-0 left-0 w-full p-2 md:p-4 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent z-[60]">
+              <div className="max-w-3xl mx-auto relative">
+                {previewImage && (
+                  <div className="absolute -top-16 left-2">
+                    <img src={previewImage} className="w-12 h-12 rounded-lg border-2 border-doulia-lime object-cover" alt="preview" />
+                  </div>
+                )}
+                <div className="flex items-end gap-2 bg-slate-900/95 border border-white/10 rounded-[2rem] p-2 md:p-3 shadow-2xl backdrop-blur-lg focus-within:border-doulia-lime/50 transition-all">
+                  <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 md:w-10 md:h-10 text-slate-400 hover:text-doulia-lime flex items-center justify-center shrink-0">
+                    <i className="fas fa-paperclip text-lg"></i>
+                  </button>
+                  <textarea 
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
+                    placeholder="Un besoin ? Douly vous répond..."
+                    className="flex-1 bg-transparent border-none focus:ring-0 text-white text-[16px] py-3 px-1 resize-none max-h-40 custom-scrollbar" 
+                    rows={1}
+                  />
+                  <button onClick={() => handleSendMessage()} disabled={!input.trim() && !imageFile} className="w-12 h-12 md:w-10 md:h-10 bg-doulia-lime text-slate-950 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 disabled:opacity-30 transition-all shrink-0 shadow-lg shadow-doulia-lime/20">
+                    <i className="fas fa-paper-plane"></i>
+                  </button>
+                </div>
+                <input type="file" ref={fileInputRef} className="hidden" onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setImageFile(file);
+                    setPreviewImage(URL.createObjectURL(file));
+                  }
+                }} />
+              </div>
             </footer>
-          )}
-        </div>
-      </main>
+          </main>
+        </>
+      )}
     </div>
   );
 };
