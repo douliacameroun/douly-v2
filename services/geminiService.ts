@@ -3,7 +3,7 @@ import { SYSTEM_INSTRUCTION } from "../constants";
 import { DouliaVoice } from "../types";
 
 const getAIClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 };
 
 const formatVoiceflowText = (text: string): string => {
